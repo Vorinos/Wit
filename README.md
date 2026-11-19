@@ -3,7 +3,9 @@
 Wit reads your notes and AI chats, files them into folders, links related entries, and draws everything as points
 you can rotate, sort, zoom into and search. It runs on your computer. Your notes are not uploaded anywhere.
 
-![Wit](docs/screenshot.png)
+[![Wit](docs/screenshot.png)](docs/wit-showcase.mp4)
+
+▶ [Watch the showcase video](docs/wit-showcase.mp4) (55 s)
 
 ## Features
 
