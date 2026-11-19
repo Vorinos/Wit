@@ -1,0 +1,65 @@
+{
+  "name": "wit",
+  "productName": "Wit",
+  "version": "0.3.1",
+  "description": "Files your notes and AI chats and draws them as a map you can explore.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/modules.test.js test/main.test.js",
+    "mcp": "node mcp/wit-mcp.js",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "check:mac": "spctl -a -vv -t exec dist/mac-arm64/Wit.app"
+  },
+  "devDependencies": {
+    "electron": "^38.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "app.wit.desktop",
+    "productName": "Wit",
+    "files": [
+      "main.js",
+      "preload.js",
+      "desktop/**/*",
+      "mcp/**/*",
+      "app/**/*",
+      "build/icon.png"
+    ],
+    "asarUnpack": [
+      "mcp/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Office"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Vorinos/wit.git"
+  }
+}
