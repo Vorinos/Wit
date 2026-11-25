@@ -3,3 +3,4 @@ dist/
 .DS_Store
 *.wit-backup
 .env
+build/*.provisionprofile

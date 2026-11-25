@@ -7,7 +7,7 @@ fs.mkdirSync(downloads, { recursive: true });
 process.env.HOME = home; process.env.USERPROFILE = home; process.env.CLAUDE_CONFIG_DIR = path.join(home, '.claude'); process.env.CODEX_HOME = path.join(home, '.codex'); process.env.XDG_CONFIG_HOME = path.join(home, '.config');
 const handlers = {}, sent = [], opened = [];
 const fakeElectron = {
-  app: { whenReady: () => Promise.resolve(), getPath: k => k === 'userData' ? userData : k === 'downloads' ? downloads : home, isPackaged: false, getVersion: () => '0.3.1', on() {} },
+  app: { whenReady: () => Promise.resolve(), getPath: k => k === 'userData' ? userData : k === 'downloads' ? downloads : home, isPackaged: false, getVersion: () => '0.4.0', on() {} },
   nativeTheme: { themeSource: 'system' },
   BrowserWindow: class { setVibrancy(v) { fakeElectron._vib = v; } constructor(o) { this.o = o; this.webContents = { setWindowOpenHandler() {}, on() {}, send: (ch, d) => sent.push([ch, d]) }; } once() {} on() {} loadFile() {} isDestroyed() { return false; } static getAllWindows() { return [1]; } },
   shell: { openExternal: u => opened.push(u), showItemInFolder() {} },

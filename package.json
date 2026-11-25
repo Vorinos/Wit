@@ -1,16 +1,18 @@
 {
   "name": "wit",
   "productName": "Wit",
-  "version": "0.3.1",
+  "version": "0.4.3",
   "description": "Files your notes and AI chats and draws them as a map you can explore.",
   "main": "main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/modules.test.js test/main.test.js",
+    "test": "node --test test/modules.test.js test/main.test.js test/mas.test.js",
     "mcp": "node mcp/wit-mcp.js",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
+    "dist:mas": "electron-builder --mac mas --universal",
+    "dist:mas-dev": "electron-builder --mac mas-dev --arm64",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux",
     "check:mac": "spctl -a -vv -t exec dist/mac-arm64/Wit.app"
@@ -20,7 +22,7 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "app.wit.desktop",
+    "appId": "com.vorinos.wit",
     "productName": "Wit",
     "files": [
       "main.js",
@@ -56,6 +58,26 @@
         "AppImage"
       ],
       "category": "Office"
+    },
+    "mas": {
+      "entitlements": "build/entitlements.mas.plist",
+      "entitlementsInherit": "build/entitlements.mas.inherit.plist",
+      "provisioningProfile": "build/embedded.provisionprofile",
+      "hardenedRuntime": false,
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "masDev": {
+      "entitlements": "build/entitlements.mas.plist",
+      "entitlementsInherit": "build/entitlements.mas.inherit.plist",
+      "provisioningProfile": "build/development.provisionprofile",
+      "hardenedRuntime": false,
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     }
   },
   "repository": {

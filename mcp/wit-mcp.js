@@ -13,7 +13,7 @@
 'use strict';
 const fs = require('fs'), path = require('path'), os = require('os'), http = require('http'), crypto = require('crypto');
 
-const VERSION = '0.3.1';
+const VERSION = '0.4.0';
 const PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 
 /* ---------- where the record lives ---------- */

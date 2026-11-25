@@ -4,17 +4,20 @@
 // The page itself still has no network at all. The only things that leave this computer are questions you send to an
 // AI you chose (through this process, to that provider's address only), and the record, if you serve it to ChatGPT.
 'use strict';
-const { app, BrowserWindow, shell, session, ipcMain, safeStorage, nativeTheme } = require('electron');
+const { app, BrowserWindow, shell, session, ipcMain, safeStorage, nativeTheme, dialog } = require('electron');
 const path = require('path'), fs = require('fs'), os = require('os'), crypto = require('crypto'), { execFile } = require('child_process');
 const sources = require('./desktop/sources'), exportsMod = require('./desktop/exports'), connect = require('./desktop/connect'), ai = require('./desktop/ai'), mcp = require('./mcp/wit-mcp');
 
-const MAC = process.platform === 'darwin' && !process.env.WIT_OPAQUE;      // WIT_OPAQUE=1 turns the see-through window off
+const MAC = process.platform === 'darwin' && !process.env.WIT_OPAQUE;
+// The Mac App Store build runs in Apple's sandbox. It reads Claude Code and Codex sessions only from folders the
+// person has picked, and it never writes other apps' settings: the Connect page shows the setup to paste instead.
+const MAS = !!process.mas || !!process.env.WIT_MAS;      // WIT_OPAQUE=1 turns the see-through window off
 let win = null, ready = false;
 const DATA = () => app.getPath('userData');
 const file = n => path.join(DATA(), n);
 
 /* ---------- settings, kept in Wit's own folder ---------- */
-const DEFAULTS = { glass: 'clear', sources: { claudeCode: false, codex: false }, watchDownloads: false, offered: {}, ai: { provider: 'off', models: {}, localBase: ai.PROVIDERS.local.base, keys: {}, consent: false }, http: { on: false, port: 8765, token: '' } };
+const DEFAULTS = { glass: 'clear', folders: {}, sources: { claudeCode: false, codex: false }, watchDownloads: false, offered: {}, ai: { provider: 'off', models: {}, localBase: ai.PROVIDERS.local.base, keys: {}, consent: false }, http: { on: false, port: 8765, token: '' } };
 let S = null;
 function loadSettings() { try { S = Object.assign({}, DEFAULTS, JSON.parse(fs.readFileSync(file('settings.json'), 'utf8'))); } catch (e) { S = JSON.parse(JSON.stringify(DEFAULTS)); } S.ai = Object.assign({}, DEFAULTS.ai, S.ai); S.http = Object.assign({}, DEFAULTS.http, S.http); S.sources = Object.assign({}, DEFAULTS.sources, S.sources); }
 function writeAtomic(p, text) { fs.mkdirSync(path.dirname(p), { recursive: true }); const t = p + '.tmp'; fs.writeFileSync(t, text); fs.renameSync(t, p); }
@@ -48,7 +51,7 @@ function createWindow() {
 }
 
 /* ---------- the record, mirrored for connected apps ---------- */
-handle('app:info', () => ({ desktop: true, platform: process.platform, version: app.getVersion(), dataDir: DATA(), keyStorage: safeStorage.isEncryptionAvailable() ? 'keychain' : 'session' }));
+handle('app:info', () => ({ desktop: true, mas: MAS, platform: process.platform, version: app.getVersion(), dataDir: DATA(), keyStorage: safeStorage.isEncryptionAvailable() ? 'keychain' : 'session' }));
 // the page's light or dark chrome decides whether the glass behind it is light or dark
 const GLASS = ['clear', 'frosted', 'solid'];
 // Clear: the system's lighter blur; Frosted: its denser one; Solid: none (the page paints the window)
@@ -72,13 +75,27 @@ handle('inbox:ack', () => { try { fs.unlinkSync(TAKEN()); } catch (e) { /* gone 
 
 /* ---------- Claude Code and Codex sessions ---------- */
 const inflight = {};
-function sourceStatus() { const out = {}; for (const id of Object.keys(sources.SOURCES)) { const c = sources.count(id); out[id] = Object.assign(c, { on: !!S.sources[id], filed: Object.keys(seen[id] || {}).length, waiting: !!inflight[id] }); } return out; }
+/* In the App Store build the folders come from the person: picked once, kept as security-scoped bookmarks, opened again
+   at every start. The real home folder is the one in the account, not the sandbox's own. */
+const ENV_OF = { claudeCode: 'CLAUDE_CONFIG_DIR', codex: 'CODEX_HOME' }, INNER = { claudeCode: 'projects', codex: 'sessions' }, opened = {};
+const realHome = () => { try { return os.userInfo().homedir; } catch (e) { return os.homedir(); } };
+function openFolder(id) {
+  const f = S.folders && S.folders[id]; if (!f || !f.path) return false; if (opened[id]) return true;
+  if (f.bookmark && app.startAccessingSecurityScopedResource) { try { opened[id] = app.startAccessingSecurityScopedResource(f.bookmark) || true; } catch (e) { return false; } } else opened[id] = true;
+  return true;
+}
+function srcEnv() {
+  if (!MAS) return process.env;
+  const env = {}; for (const id of Object.keys(ENV_OF)) { const f = S.folders && S.folders[id]; env[ENV_OF[id]] = f && f.path && openFolder(id) ? f.home : path.join(os.tmpdir(), 'wit-no-folder-' + id); }
+  return env;
+}
+function sourceStatus() { const env = srcEnv(), out = {}; for (const id of Object.keys(sources.SOURCES)) { const c = sources.count(id, env), f = S.folders && S.folders[id]; out[id] = Object.assign(c, { on: !!S.sources[id], filed: Object.keys(seen[id] || {}).length, waiting: !!inflight[id], pick: MAS, picked: !!(f && f.path), suggest: path.join(realHome(), id === 'codex' ? '.codex' : '.claude') }); } return out; }
 function scanSources(force) {
   if (!ready) return 0; let sent = 0;
   for (const id of Object.keys(sources.SOURCES)) {
     if (!S.sources[id]) continue;
     if (inflight[id] && !force && Date.now() - inflight[id] < 120000) continue;          // the page is still filing the last batch
-    let r; try { r = sources.scan(id, seen[id], process.env, 300); } catch (e) { continue; }
+    let r; try { r = sources.scan(id, seen[id], srcEnv(), 300); } catch (e) { continue; }
     if (!r.items.length) { if (Object.keys(r.stamps).length) { Object.assign(seen[id], r.stamps); saveSeen(); } continue; }
     inflight[id] = Date.now(); sent += r.items.length;
     send('sources:items', { id, label: r.label, items: r.items, stamps: r.stamps, more: r.changed > r.items.length });
@@ -90,11 +107,23 @@ function watchSources() {
   for (const w of srcWatchers) try { w.close(); } catch (e) { /* closed */ } srcWatchers = []; clearInterval(srcTimer); srcTimer = null;
   const on = Object.keys(S.sources).filter(id => S.sources[id]); if (!on.length) return;
   srcTimer = setInterval(() => scanSources(), 120000);
-  for (const id of on) { const dir = sources.SOURCES[id].dir(); try { srcWatchers.push(fs.watch(dir, { recursive: true }, () => { clearTimeout(srcDebounce); srcDebounce = setTimeout(() => scanSources(), 6000); })); } catch (e) { /* no recursive watching here: the timer covers it */ } }
+  const env = srcEnv(); for (const id of on) { const dir = sources.SOURCES[id].dir(env); try { srcWatchers.push(fs.watch(dir, { recursive: true }, () => { clearTimeout(srcDebounce); srcDebounce = setTimeout(() => scanSources(), 6000); })); } catch (e) { /* no recursive watching here: the timer covers it */ } }
 }
 handle('sources:status', () => sourceStatus());
 handle('sources:set', (id, on) => { if (!sources.SOURCES[id]) throw new Error('unknown source'); S.sources[id] = !!on; saveSettings(); watchSources(); if (on) setTimeout(() => scanSources(true), 200); return sourceStatus(); });
 handle('sources:sync', () => scanSources(true));
+/* the App Store build: the person shows Wit the folder once. Picking ~/.claude or its projects folder both work. */
+handle('sources:pick', async id => {
+  if (!sources.SOURCES[id]) throw new Error('unknown source');
+  const name = id === 'codex' ? 'Codex' : 'Claude Code', dot = id === 'codex' ? '.codex' : '.claude';
+  const r = await dialog.showOpenDialog(win, { title: 'Choose your ' + dot + ' folder', message: 'Wit reads your ' + name + ' sessions from this folder. It is in your home folder; press Command-Shift-Period if it is hidden.', buttonLabel: 'Use this folder', defaultPath: path.join(realHome(), dot), properties: ['openDirectory', 'showHiddenFiles'], securityScopedBookmarks: MAS });
+  if (r.canceled || !r.filePaths || !r.filePaths[0]) return sourceStatus();
+  const picked = r.filePaths[0], inner = path.basename(picked) === INNER[id];
+  if (typeof opened[id] === 'function') try { opened[id](); } catch (e) { /* already let go */ } delete opened[id];
+  S.folders = Object.assign({}, S.folders, { [id]: { path: picked, home: inner ? path.dirname(picked) : picked, bookmark: r.bookmarks && r.bookmarks[0] || null } });
+  S.sources[id] = true; saveSettings(); watchSources(); setTimeout(() => scanSources(true), 200);
+  return sourceStatus();
+});
 handle('sources:ack', (id, stamps) => { if (!sources.SOURCES[id] || !stamps || typeof stamps !== 'object') return false; Object.assign(seen[id], stamps); saveSeen(); delete inflight[id]; setTimeout(() => scanSources(), 1500); return true; });
 handle('sources:forget', id => { if (!sources.SOURCES[id]) return false; seen[id] = {}; saveSeen(); delete inflight[id]; return sourceStatus(); });
 
@@ -106,7 +135,7 @@ function look(p) { clearTimeout(dlTimers.get(p)); dlTimers.set(p, setTimeout(() 
 function watchDownloads() {
   if (dlWatcher) { try { dlWatcher.close(); } catch (e) { /* closed */ } dlWatcher = null; }
   if (!S.watchDownloads) return;
-  const dir = app.getPath('downloads');
+  let dir = app.getPath('downloads'); try { dir = fs.realpathSync(dir); } catch (e) { /* as it is */ }
   try { dlWatcher = fs.watch(dir, (ev, name) => { if (name && /\.(zip|dms)$/i.test(name)) look(path.join(dir, name)); }); } catch (e) { /* the folder could not be watched */ }
   for (const it of exportsMod.recent(dir, Date.now() - 3 * 864e5)) offer(it);
 }
@@ -135,10 +164,15 @@ function findClaude() {
     execFile(process.env.SHELL || '/bin/zsh', ['-ilc', 'command -v claude'], { timeout: 8000 }, (e, out) => { const p = String(out || '').trim().split('\n').pop(); resolve(!e && p && fs.existsSync(p) ? p : null); });
   });
 }
-async function clientsStatus() { const sp = spec(), loc = connect.locations(); const list = Object.keys(connect.CLIENTS).map(id => connect.status(id, sp, loc)); return { clients: list, http: httpStatus() }; }
+async function clientsStatus() {
+  if (MAS) return { mas: true, clients: Object.keys(connect.CLIENTS).map(id => ({ id, label: connect.CLIENTS[id].label, kind: connect.CLIENTS[id].kind, restart: connect.CLIENTS[id].restart, manual: true })), http: httpStatus() };
+  const sp = spec(), loc = connect.locations(); const list = Object.keys(connect.CLIENTS).map(id => connect.status(id, sp, loc)); return { clients: list, http: httpStatus() };
+}
 handle('connect:status', () => clientsStatus());
+const MANUAL = 'In the App Store version, Wit does not change other apps’ settings. Copy the setup below and paste it in yourself.';
 handle('connect:install', async id => {
   if (!connect.CLIENTS[id]) throw new Error('unknown app');
+  if (MAS) throw new Error(MANUAL);
   if (id === 'claudeCode') {
     const bin = await findClaude(); if (!bin) { const e = new Error('Wit could not find the claude command. Run the command below in a terminal instead.'); throw e; }
     const args = connect.claudeCodeArgs(spec());
@@ -148,13 +182,14 @@ handle('connect:install', async id => {
   return clientsStatus();
 });
 handle('connect:remove', async id => {
+  if (MAS) throw new Error(MANUAL);
   if (id === 'claudeCode') { const bin = await findClaude(); if (!bin) throw new Error('Wit could not find the claude command. Run: claude mcp remove --scope user wit'); await new Promise((res, rej) => execFile(bin, connect.claudeCodeArgs(spec()).remove, { timeout: 20000 }, e => e ? rej(new Error('claude could not remove it')) : res())); }
   else connect.remove(id, spec());
   return clientsStatus();
 });
 handle('connect:snippet', id => connect.snippet(id, spec()));
 handle('connect:http', on => setHttp(on));
-handle('connect:reveal', id => { const L = connect.locations()[id]; if (L && fs.existsSync(L.file)) shell.showItemInFolder(L.file); return true; });
+handle('connect:reveal', id => { if (MAS) return false; const L = connect.locations()[id]; if (L && fs.existsSync(L.file)) shell.showItemInFolder(L.file); return true; });
 
 /* ---------- asking an AI, only when switched on ---------- */
 function keyFor(p) { const k = S.ai.keys[p]; if (!k) return sessionKeys[p] || ''; try { return safeStorage.decryptString(Buffer.from(k, 'base64')); } catch (e) { return ''; } }
@@ -200,6 +235,7 @@ app.whenReady().then(() => {
     (details, callback) => callback({ cancel: true })
   );
   createWindow();
+  if (MAS) for (const id of Object.keys(S.folders || {})) openFolder(id);
   watchSources(); watchDownloads();
   try { fs.mkdirSync(DATA(), { recursive: true }); fs.watch(DATA(), (ev, name) => { if (name === 'inbox.jsonl') { clearTimeout(watchSources.ib); watchSources.ib = setTimeout(checkInbox, 800); } }); } catch (e) { /* the timer below covers it */ }
   setInterval(checkInbox, 30000);

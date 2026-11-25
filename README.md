@@ -3,9 +3,7 @@
 Wit reads your notes and AI chats, files them into folders, links related entries, and draws everything as points
 you can rotate, sort, zoom into and search. It runs on your computer. Your notes are not uploaded anywhere.
 
-[![Wit](docs/wit-wheel.png)](docs/wit-showcase.mp4)
-
-▶ [Watch the showcase video](docs/wit-showcase.mp4) (55 s)
+![Wit](docs/screenshot.png)
 
 ## Features
 
@@ -62,6 +60,31 @@ npm run check:mac     # should report "accepted" and "Notarized Developer ID"
 
 If those variables aren't set, the build is unsigned.
 
+### Mac App Store
+
+The App Store build runs in Apple's sandbox, so two things work differently:
+
+- **Connect apps** shows each app's setup to copy and paste. Wit doesn't edit other apps' settings files.
+- **Claude Code and Codex sessions** are read only after you choose the `~/.claude` or `~/.codex` folder once.
+
+You need, from developer.apple.com:
+
+1. An App ID for `com.vorinos.wit` (the bundle ID in `package.json`).
+2. Certificates: **Apple Distribution** and **Mac Installer Distribution**.
+3. A **Mac App Store Connect** provisioning profile for that App ID, saved as `build/embedded.provisionprofile`.
+
+Then:
+
+```
+npm run dist:mas      # dist/mas-universal/Wit-<version>-universal.pkg
+```
+
+Upload the `.pkg` with Apple's Transporter app, then fill in the listing in App Store Connect (screenshots, a
+privacy policy URL, the privacy questions) and submit it for review.
+
+To test the sandboxed app on your own Mac first, use an **Apple Development** certificate and a **macOS App
+Development** profile saved as `build/development.provisionprofile`, then `npm run dist:mas-dev`.
+
 ## Connecting AI apps
 
 Open **Connect apps** in the sidebar.
@@ -108,7 +131,7 @@ build/icon.png      app icon
 
 ## Status
 
-Tested: the modules, `main.js` against a stubbed Electron, the interface in headless Chrome, and the MCP server over
+Tested: the modules, `main.js` against a stubbed Electron (including the sandboxed App Store mode), the interface in headless Chrome, and the MCP server over
 stdio and HTTP. An earlier build has been run on macOS; this version has not been checked on a Mac yet. Windows
 and Linux builds and signing with a real certificate have not been tried.
 
