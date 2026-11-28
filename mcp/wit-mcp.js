@@ -218,8 +218,8 @@ function serveStdio(opts = {}) {
 }
 
 /* ---------- Streamable HTTP, for ChatGPT through a tunnel ---------- */
-function startHttp(opts = {}) {
-  const host = opts.host || '127.0.0.1', port = opts.port || 8765, token = opts.token || crypto.randomBytes(18).toString('hex'), base = '/mcp/' + token;
+function startHttp(opts = {}) {             // opts.port 0 asks for any free port
+  const host = opts.host || '127.0.0.1', port = opts.port != null ? opts.port : 8765, token = opts.token || crypto.randomBytes(18).toString('hex'), base = '/mcp/' + token;
   const sessions = new Map();
   const server = http.createServer((req, res) => {
     const send = (code, body, headers) => { res.writeHead(code, Object.assign({ 'Cache-Control': 'no-store' }, body ? { 'Content-Type': 'application/json' } : {}, headers || {})); res.end(body ? JSON.stringify(body) : undefined); };
