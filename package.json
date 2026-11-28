@@ -1,7 +1,7 @@
 {
   "name": "wit",
   "productName": "Wit",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Files your notes and AI chats and draws them as a map you can explore.",
   "main": "main.js",
   "private": true,
