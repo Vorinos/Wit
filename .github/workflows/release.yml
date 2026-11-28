@@ -1,5 +1,6 @@
 # Builds the desktop app for macOS (Apple silicon and Intel), Windows and Linux, and publishes it as a GitHub release.
-# Runs when a version tag is pushed (git tag v0.5.0 && git push origin v0.5.0), or by hand from the Actions tab.
+# Runs when a version tag is pushed (git tag v0.5.0 && git push origin v0.5.0), or by hand from the Actions tab
+# (Release > Run workflow, with the version): then it builds the branch it is run on and makes the tag itself.
 #
 # The files keep the same names in every release, so these links always fetch the newest one:
 #   https://github.com/Vorinos/Wit/releases/latest/download/Wit-arm64.dmg
@@ -19,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'The tag to build and release, for example v0.5.0'
+        description: 'The version to release, for example v0.5.0 (the tag is made at the commit this runs on)'
         required: true
 
 permissions:
@@ -40,8 +41,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -84,6 +83,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
+          target_commitish: ${{ github.sha }}
           name: Wit ${{ inputs.tag || github.ref_name }}
           make_latest: true
           files: out/*
