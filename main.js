@@ -39,7 +39,7 @@ function createWindow() {
     // blurred by the system: lightly (Clear) or densely (Frosted), or not at all (Solid; the page paints it). The title bar is hidden
     // so the traffic lights sit inside the sidebar.
     ...(MAC ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 20, y: 20 }, transparent: true, hasShadow: true, visualEffectState: 'active', backgroundColor: '#00000000' } : { backgroundColor: '#000000' }),
-    icon: path.join(__dirname, 'build', 'icon.png'),
+    icon: path.join(__dirname, 'build', process.platform === 'darwin' ? 'icon.png' : 'icon-square.png'),   // the Mac icon carries its own margin; elsewhere the tile fills
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: false, preload: path.join(__dirname, 'preload.js') }
   });
   applyGlass();
