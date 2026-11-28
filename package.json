@@ -1,7 +1,7 @@
 {
   "name": "wit",
   "productName": "Wit",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "description": "Files your notes and AI chats and draws them as a map you can explore.",
   "main": "main.js",
   "private": true,
@@ -46,18 +46,21 @@
           ]
         }
       ],
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "artifactName": "Wit-${arch}.${ext}"
     },
     "win": {
       "target": [
         "nsis"
-      ]
+      ],
+      "artifactName": "Wit-Setup.${ext}"
     },
     "linux": {
       "target": [
         "AppImage"
       ],
-      "category": "Office"
+      "category": "Office",
+      "artifactName": "Wit.${ext}"
     },
     "mas": {
       "entitlements": "build/entitlements.mas.plist",
@@ -78,7 +81,8 @@
       "extendInfo": {
         "ITSAppUsesNonExemptEncryption": false
       }
-    }
+    },
+    "afterPack": "build/adhoc-sign.js"
   },
   "repository": {
     "type": "git",

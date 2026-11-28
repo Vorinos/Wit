@@ -1,0 +1,103 @@
+# Builds the desktop app for macOS (Apple silicon and Intel), Windows and Linux, and publishes it as a GitHub release.
+# Runs when a version tag is pushed (git tag v0.5.0 && git push origin v0.5.0), or by hand from the Actions tab.
+#
+# The files keep the same names in every release, so these links always fetch the newest one:
+#   https://github.com/Vorinos/Wit/releases/latest/download/Wit-arm64.dmg
+#   https://github.com/Vorinos/Wit/releases/latest/download/Wit-x64.dmg
+#   https://github.com/Vorinos/Wit/releases/latest/download/Wit-Setup.exe
+#   https://github.com/Vorinos/Wit/releases/latest/download/Wit.AppImage
+#
+# Signing the Mac app properly (so macOS opens it without asking) needs an Apple Developer ID. When you have one, add
+# these repository secrets and the next release is signed and notarized with no other change:
+#   CSC_LINK (the Developer ID Application certificate as base64 .p12), CSC_KEY_PASSWORD,
+#   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The tag to build and release, for example v0.5.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: --mac
+          - os: windows-latest
+            target: --win --x64
+          - os: ubuntu-latest
+            target: --linux --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Test
+        if: runner.os == 'Linux'
+        run: npm test
+      - name: Build
+        shell: bash
+        run: |
+          # secrets that have not been added come through as empty strings; leave them unset instead
+          for v in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do [ -z "${!v}" ] && unset "$v"; done
+          npx electron-builder ${{ matrix.target }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wit-${{ runner.os }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.AppImage
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: Wit ${{ inputs.tag || github.ref_name }}
+          make_latest: true
+          files: out/*
+          body: |
+            Wit files your notes and AI chats on your own computer and draws them as a brain you can explore.
+
+            **Download**
+            - Mac with Apple silicon (M1 and later): `Wit-arm64.dmg`
+            - Mac with Intel: `Wit-x64.dmg`
+            - Windows: `Wit-Setup.exe`
+            - Linux: `Wit.AppImage` (make it executable, then run it)
+
+            **Opening it the first time**
+            - Mac: Wit is not notarized by Apple yet. Open it once, then go to System Settings > Privacy & Security and click Open Anyway.
+            - Windows: if SmartScreen appears, click More info, then Run anyway.
+
+            No download wanted? The same app runs in the browser at https://usewit.dev/app and keeps your notes on your device.

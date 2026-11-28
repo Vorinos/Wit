@@ -41,6 +41,19 @@ npm run dist:linux    # AppImage
 
 Output goes to `dist/`.
 
+### Releases
+
+Push a version tag and GitHub builds the Mac (Apple silicon and Intel), Windows and Linux apps and publishes them as a
+release (see `.github/workflows/release.yml`):
+
+```
+git tag v0.5.0 && git push origin v0.5.0
+```
+
+The files keep the same names in every release, so `https://github.com/Vorinos/Wit/releases/latest/download/Wit-arm64.dmg`
+(and `Wit-x64.dmg`, `Wit-Setup.exe`, `Wit.AppImage`) always fetch the newest one. Until the signing secrets listed in the
+workflow are added, the Mac app is signed ad hoc and opens after one Open Anyway in System Settings > Privacy & Security.
+
 ### Signing and notarizing on macOS
 
 Without this, macOS warns that it can't verify the app. It requires an Apple Developer Program membership.
